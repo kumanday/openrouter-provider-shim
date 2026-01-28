@@ -149,9 +149,40 @@ program
     console.log(`export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"`);
     console.log("");
 
-    console.log("=== OpenAI-compatible clients (OpenCode, OpenHands, Droid) ===");
-    console.log(`export OPENAI_BASE_URL="${baseUrl}/v1"`);
-    console.log(`export OPENAI_API_KEY="$OPENROUTER_API_KEY"`);
+    console.log("=== OpenCode (Native OpenRouter Support - No Shim Needed) ===");
+    console.log("# OpenCode has native provider routing. Add to ~/.config/opencode/opencode.json:");
+    console.log("# {");
+    console.log("#   \"provider\": {");
+    console.log("#     \"openrouter\": {");
+    console.log("#       \"models\": {");
+    console.log("#         \"moonshotai/kimi-k2.5\": {");
+    console.log("#           \"options\": {");
+    console.log("#             \"provider\": {");
+    console.log("#               \"order\": [\"fireworks\"],");
+    console.log("#               \"allow_fallbacks\": false");
+    console.log("#             }");
+    console.log("#           }");
+    console.log("#         }");
+    console.log("#       }");
+    console.log("#     }");
+    console.log("#   }");
+    console.log("# }");
+    console.log("");
+
+    console.log("=== OpenHands (Needs Shim for Provider Routing) ===");
+    console.log("# OpenHands docs don't show how to pass per-request provider routing.");
+    console.log("# Use this shim and configure OpenHands with:");
+    console.log(`# Base URL: ${baseUrl}/v1`);
+    console.log("# Model: moonshotai/kimi-k2.5");
+    console.log("");
+
+    console.log("=== Droid / Factory (Use Shim if Tool Calls Fail) ===");
+    console.log("# Droid supports provider routing via extraArgs, but tool calls may not work.");
+    console.log("# If tool calls fail, try the shim:");
+    console.log(`# baseUrl: ${baseUrl}/v1`);
+    console.log("# provider: generic-chat-completion-api");
+    console.log("# model: moonshotai/kimi-k2.5");
+    console.log("# Or try Anthropic path: baseUrl without /v1, provider: anthropic-messages");
     console.log("");
 
     console.log("=== Windows PowerShell (Automatic) ===");
