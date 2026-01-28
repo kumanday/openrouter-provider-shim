@@ -135,7 +135,10 @@ program
     console.log("=== Claude Code (Automatic - Recommended) ===");
     console.log("# Works if you have both ANTHROPIC_API_KEY and OPENROUTER_API_KEY set");
     console.log(`export ANTHROPIC_BASE_URL="${baseUrl}"`);
-    console.log(`export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"`);
+    console.log("# For best results, use an Anthropic model:");
+    console.log(`export ANTHROPIC_MODEL="anthropic/claude-3.5-sonnet"`);
+    console.log("# Or for non-Claude models (streaming disabled, auto-retry enabled):");
+    console.log(`# export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"`);
     console.log("# The shim will automatically substitute your Anthropic key with your OpenRouter key");
     console.log("");
 
@@ -153,7 +156,10 @@ program
 
     console.log("=== Windows PowerShell (Automatic) ===");
     console.log(`$env:ANTHROPIC_BASE_URL="${baseUrl}"`);
-    console.log(`$env:ANTHROPIC_MODEL="moonshotai/kimi-k2.5"`);
+    console.log("# For best results, use an Anthropic model:");
+    console.log(`$env:ANTHROPIC_MODEL="anthropic/claude-3.5-sonnet"`);
+    console.log("# Or for non-Claude models (streaming disabled, auto-retry enabled):");
+    console.log(`# $env:ANTHROPIC_MODEL="moonshotai/kimi-k2.5"`);
     console.log("");
 
     console.log("=== Windows PowerShell (Explicit) ===");

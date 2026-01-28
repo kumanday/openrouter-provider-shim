@@ -37,7 +37,11 @@ If you have both `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY` set, the shim will
 ```bash
 export OPENROUTER_API_KEY="sk-or-v1-..."
 export ANTHROPIC_API_KEY="sk-ant-..."  # Can keep this set for other tools
-export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"
+
+# For best results with Claude Code, use an Anthropic model:
+export ANTHROPIC_MODEL="anthropic/claude-3.5-sonnet"
+# Or for non-Claude models (streaming disabled, auto-retry enabled):
+# export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"
 
 npx openrouter-provider-shim serve --port 8787 --provider-only fireworks --sort throughput --no-fallbacks &
 export ANTHROPIC_BASE_URL="http://127.0.0.1:8787"
@@ -60,6 +64,15 @@ export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"
 
 claude
 ```
+
+### Known Limitations
+
+**Rate limiting:** The shim includes automatic retry with custom backoff delays for Claude Code (detected by its use of the Anthropic Messages API). Retries use delays: 1s, 2s, 4s, 8s, 12s, 18s, 24s, 32s. OpenAI-compatible clients (OpenCode, OpenHands, Droid) do not get automatic retry for the time being (pending testing).
+
+If you hit rate limits:
+- Add your own Fireworks API key to OpenRouter (BYOK) at https://openrouter.ai/settings/integrations
+- Use the `--provider-order` option to allow fallback providers
+- Wait a moment between requests and manually retry or prompt "Continue"
 
 ### OpenCode / OpenHands / Droid
 

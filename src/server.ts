@@ -158,9 +158,25 @@ export function startServer(cfg: ShimConfig): http.Server {
           log.debug({ body: bodyToLog }, "request body");
         }
         
-        // Debug: log model name for troubleshooting
+        // Force non-streaming mode to avoid SSE translation issues with non-Claude models
+        // This is a workaround for OpenRouter's streaming format translation
+        if (body?.stream === true) {
+          body.stream = false;
+          if (cfg.log_level === "debug") {
+            log.debug({}, "disabled streaming for non-Claude model");
+          }
+        }
+
+        // Debug: log model name and tools for troubleshooting
         if (cfg.log_level === "debug") {
-          log.debug({ model: body?.model, modelLength: body?.model?.length }, "model from request");
+          log.debug({ 
+            model: body?.model, 
+            modelLength: body?.model?.length,
+            hasTools: !!body?.tools?.length,
+            toolCount: body?.tools?.length ?? 0,
+            toolNames: body?.tools?.map((t: any) => t.name),
+            stream: body?.stream,
+          }, "request details");
         }
 
         // Remap Anthropic model names to user's preferred model
@@ -227,36 +243,62 @@ export function startServer(cfg: ShimConfig): http.Server {
         if (cfg.attribution?.title) headers["x-title"] = cfg.attribution.title;
       }
 
-      // Make upstream request
+      // Make upstream request with retry logic for rate limits
       let upstreamResp: Response;
-      try {
-        const requestBody = req.method === "POST" ? JSON.stringify(body) : undefined;
-        
-        // Debug: log the actual request body for troubleshooting
-        if (cfg.log_level === "debug" && requestBody) {
-          log.debug({ 
-            url: upstream, 
-            bodySize: requestBody.length,
-            bodyPreview: requestBody.slice(0, 1000),
-          }, "upstream request body");
+      let retries = 0;
+      
+      // Custom retry delays: 1, 2, 4, 8, 12, 18, 24, 32 seconds
+      const retryDelays = [1000, 2000, 4000, 8000, 12000, 18000, 24000, 32000];
+      
+      // Auto-enable retry for Claude Code (detected by Anthropic Messages API endpoint)
+      // Claude Code uses /v1/messages, while other harnesses use /v1/chat/completions
+      const isClaudeCode = url.pathname === "/v1/messages";
+      const maxRetries = isClaudeCode ? retryDelays.length : 0;
+      
+      while (true) {
+        try {
+          const requestBody = req.method === "POST" ? JSON.stringify(body) : undefined;
+          
+          // Debug: log the actual request body for troubleshooting
+          if (cfg.log_level === "debug" && requestBody) {
+            log.debug({ 
+              url: upstream, 
+              bodySize: requestBody.length,
+              bodyPreview: requestBody.slice(0, 1000),
+            }, "upstream request body");
+          }
+          
+          upstreamResp = await fetch(upstream, {
+            method: req.method,
+            headers,
+            body: requestBody,
+            signal: AbortSignal.timeout(cfg.request_timeout_ms),
+          });
+          
+          // If we get a 429 and retries are enabled, retry with custom delays
+          if (upstreamResp.status === 429 && retries < maxRetries) {
+            const delayMs = retryDelays[retries];
+            retries++;
+            log.info({ retries, delayMs, status: 429, isClaudeCode }, "rate limited, retrying");
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            continue;
+          }
+          
+          break; // Success or non-retryable error
+        } catch (err: any) {
+          log.error({ err: err.message, upstream }, "upstream request failed");
+          return writeError(res, 502, `Upstream request failed: ${err.message}`, "ERR_UPSTREAM_FAILED");
         }
-        
-        upstreamResp = await fetch(upstream, {
-          method: req.method,
-          headers,
-          body: requestBody,
-          signal: AbortSignal.timeout(cfg.request_timeout_ms),
-        });
-      } catch (err: any) {
-        log.error({ err: err.message, upstream }, "upstream request failed");
-        return writeError(res, 502, `Upstream request failed: ${err.message}`, "ERR_UPSTREAM_FAILED");
       }
 
-      // For error responses, capture the body for logging before piping
-      let errorBodyForLogging: string | undefined;
-      if (upstreamResp.status >= 400 && cfg.log_level === "debug") {
+      // For error responses or non-streaming responses with tools, capture the body for logging
+      let responseBodyForLogging: string | undefined;
+      const isStreaming = body?.stream === true;
+      const hasTools = !!body?.tools?.length;
+      
+      if (cfg.log_level === "debug" && (upstreamResp.status >= 400 || (!isStreaming && hasTools))) {
         try {
-          errorBodyForLogging = await upstreamResp.clone().text();
+          responseBodyForLogging = await upstreamResp.clone().text();
         } catch {
           // Ignore clone/read errors
         }
@@ -275,9 +317,9 @@ export function startServer(cfg: ShimConfig): http.Server {
         model,
       }, "request");
       
-      // Log error details for debugging
-      if (errorBodyForLogging) {
-        log.debug({ errorBody: errorBodyForLogging.slice(0, 1000) }, "upstream error response");
+      // Log response details for debugging
+      if (responseBodyForLogging) {
+        log.debug({ responseBody: responseBodyForLogging.slice(0, 2000) }, "upstream response");
       }
 
     } catch (err: any) {

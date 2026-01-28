@@ -54,6 +54,10 @@ export async function pipeFetchResponse(upstreamResp: Response, res: ServerRespo
   // Forward other useful headers
   const xRequestId = upstreamResp.headers.get("x-request-id");
   if (xRequestId) headers["x-request-id"] = xRequestId;
+  
+  // Forward Retry-After header for rate limiting (429 errors)
+  const retryAfter = upstreamResp.headers.get("retry-after");
+  if (retryAfter) headers["retry-after"] = retryAfter;
 
   res.writeHead(upstreamResp.status ?? 200, headers);
 
@@ -68,7 +72,12 @@ export async function pipeFetchResponse(upstreamResp: Response, res: ServerRespo
       const { value, done } = await reader.read();
       if (done) break;
       if (value) {
-        res.write(Buffer.from(value));
+        // Write the chunk and handle backpressure
+        const canContinue = res.write(value);
+        if (!canContinue) {
+          // Wait for the drain event before continuing
+          await new Promise<void>((resolve) => res.once('drain', resolve));
+        }
       }
     }
   } finally {

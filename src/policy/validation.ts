@@ -38,8 +38,9 @@ export function validateMethod(
   method: string,
   pathname: string
 ): ValidationError | null {
-  // GET is allowed for /v1/models and health endpoints
+  // GET is allowed for /v1/models passthrough
   if (method === "GET" && pathname === "/v1/models") return null;
+  // POST is allowed for all API endpoints
   if (method === "POST") return null;
 
   return {
