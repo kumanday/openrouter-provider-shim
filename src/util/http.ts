@@ -80,6 +80,12 @@ export function getInboundAuth(req: IncomingMessage): string | undefined {
   const auth = req.headers["authorization"];
   if (typeof auth === "string" && auth.trim()) return auth;
   const xApiKey = req.headers["x-api-key"];
-  if (typeof xApiKey === "string" && xApiKey.trim()) return `Bearer ${xApiKey}`;
+  if (typeof xApiKey === "string" && xApiKey.trim()) {
+    // Don't add "Bearer " if x-api-key already has it
+    if (xApiKey.toLowerCase().startsWith("bearer ")) {
+      return xApiKey;
+    }
+    return `Bearer ${xApiKey}`;
+  }
   return undefined;
 }

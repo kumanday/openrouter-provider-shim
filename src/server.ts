@@ -10,6 +10,20 @@ import type { ShimConfig } from "./config.js";
 
 const OPENROUTER_BASE_V1 = "https://openrouter.ai/api/v1";
 
+// Anthropic model names that Claude Code uses internally (for title generation, etc.)
+// These need to be remapped to the user's preferred model
+const ANTHROPIC_MODEL_PREFIXES = ["claude-", "claude-haiku-", "claude-sonnet-", "claude-opus-"];
+
+function isAnthropicModel(model: string): boolean {
+  return ANTHROPIC_MODEL_PREFIXES.some(prefix => model.toLowerCase().startsWith(prefix));
+}
+
+function getTargetModel(): string {
+  // Use ANTHROPIC_MODEL env var (what the user configured for Claude Code)
+  // Fall back to a sensible default
+  return process.env.ANTHROPIC_MODEL || "moonshotai/kimi-k2.5";
+}
+
 function upstreamUrlForPath(pathname: string, config: ShimConfig): string | null {
   if (pathname === "/v1/messages" && config.enable_anthropic) {
     return `${OPENROUTER_BASE_V1}/messages`;
@@ -26,13 +40,41 @@ function upstreamUrlForPath(pathname: string, config: ShimConfig): string | null
   return null;
 }
 
+function looksLikeAnthropicKey(auth: string): boolean {
+  // Anthropic API keys typically start with "sk-ant-" or "sk-ant-api-"
+  const key = auth.replace(/^Bearer\s+/i, "");
+  return key.startsWith("sk-ant");
+}
+
+function looksLikeOpenRouterKey(auth: string): boolean {
+  // OpenRouter API keys start with "sk-or-"
+  const key = auth.replace(/^Bearer\s+/i, "");
+  return key.startsWith("sk-or-");
+}
+
 function getUpstreamAuth(req: IncomingMessage, cfg: ShimConfig): string | undefined {
   if (cfg.auth_mode === "upstream-key") {
     if (!cfg.upstream_api_key) return undefined;
     return `Bearer ${cfg.upstream_api_key}`;
   }
-  // passthrough
-  return getInboundAuth(req) ?? (cfg.upstream_api_key ? `Bearer ${cfg.upstream_api_key}` : undefined);
+
+  // passthrough mode with smart substitution
+  const inboundAuth = getInboundAuth(req);
+
+  if (inboundAuth) {
+    // If inbound auth looks like an Anthropic key and we have an OpenRouter key,
+    // substitute it automatically (common case: user has ANTHROPIC_API_KEY set for
+    // other tools but wants to use OpenRouter via this shim)
+    const isAnthropicKey = looksLikeAnthropicKey(inboundAuth);
+    if (isAnthropicKey && cfg.upstream_api_key) {
+      return `Bearer ${cfg.upstream_api_key}`;
+    }
+    // If it's already an OpenRouter key or some other key, pass it through
+    return inboundAuth;
+  }
+
+  // No inbound auth, fall back to configured upstream key
+  return cfg.upstream_api_key ? `Bearer ${cfg.upstream_api_key}` : undefined;
 }
 
 export function startServer(cfg: ShimConfig): http.Server {
@@ -115,6 +157,37 @@ export function startServer(cfg: ShimConfig): http.Server {
           const bodyToLog = cfg.redact_body ? redactBody(body) : body;
           log.debug({ body: bodyToLog }, "request body");
         }
+        
+        // Debug: log model name for troubleshooting
+        if (cfg.log_level === "debug") {
+          log.debug({ model: body?.model, modelLength: body?.model?.length }, "model from request");
+        }
+
+        // Remap Anthropic model names to user's preferred model
+        // Claude Code sends internal model names (claude-haiku, etc.) for helper functions
+        if (body?.model && isAnthropicModel(body.model)) {
+          const originalModel = body.model;
+          const targetModel = getTargetModel();
+          if (originalModel !== targetModel) {
+            body.model = targetModel;
+            if (cfg.log_level === "debug") {
+              log.debug({ originalModel, targetModel }, "remapped model");
+            }
+          }
+        }
+
+        // Truncate metadata.user_id if it's too long (OpenRouter has 128 char limit)
+        if (body?.metadata?.user_id && typeof body.metadata.user_id === "string") {
+          if (body.metadata.user_id.length > 128) {
+            if (cfg.log_level === "debug") {
+              log.debug({ 
+                originalLength: body.metadata.user_id.length,
+                truncated: body.metadata.user_id.slice(0, 128)
+              }, "truncating user_id");
+            }
+            body.metadata.user_id = body.metadata.user_id.slice(0, 128);
+          }
+        }
 
         // Apply provider policy
         try {
@@ -133,6 +206,15 @@ export function startServer(cfg: ShimConfig): http.Server {
         }
       }
 
+      // Debug: Check auth header
+      if (cfg.log_level === "debug") {
+        log.debug({ 
+          authLength: upstreamAuth?.length ?? 0, 
+          authPrefix: upstreamAuth?.slice(0, 30),
+          upstreamKeyLength: cfg.upstream_api_key?.length ?? 0,
+        }, "auth header");
+      }
+
       // Prepare headers for upstream request
       const headers: Record<string, string> = {
         "authorization": upstreamAuth,
@@ -148,15 +230,36 @@ export function startServer(cfg: ShimConfig): http.Server {
       // Make upstream request
       let upstreamResp: Response;
       try {
+        const requestBody = req.method === "POST" ? JSON.stringify(body) : undefined;
+        
+        // Debug: log the actual request body for troubleshooting
+        if (cfg.log_level === "debug" && requestBody) {
+          log.debug({ 
+            url: upstream, 
+            bodySize: requestBody.length,
+            bodyPreview: requestBody.slice(0, 1000),
+          }, "upstream request body");
+        }
+        
         upstreamResp = await fetch(upstream, {
           method: req.method,
           headers,
-          body: req.method === "POST" ? JSON.stringify(body) : undefined,
+          body: requestBody,
           signal: AbortSignal.timeout(cfg.request_timeout_ms),
         });
       } catch (err: any) {
         log.error({ err: err.message, upstream }, "upstream request failed");
         return writeError(res, 502, `Upstream request failed: ${err.message}`, "ERR_UPSTREAM_FAILED");
+      }
+
+      // For error responses, capture the body for logging before piping
+      let errorBodyForLogging: string | undefined;
+      if (upstreamResp.status >= 400 && cfg.log_level === "debug") {
+        try {
+          errorBodyForLogging = await upstreamResp.clone().text();
+        } catch {
+          // Ignore clone/read errors
+        }
       }
 
       // Pipe response back to caller
@@ -171,6 +274,11 @@ export function startServer(cfg: ShimConfig): http.Server {
         ms: Date.now() - started,
         model,
       }, "request");
+      
+      // Log error details for debugging
+      if (errorBodyForLogging) {
+        log.debug({ errorBody: errorBodyForLogging.slice(0, 1000) }, "upstream error response");
+      }
 
     } catch (err: any) {
       const ms = Date.now() - started;

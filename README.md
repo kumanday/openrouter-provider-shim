@@ -30,13 +30,32 @@ openrouter-provider-shim serve --port 8787
 
 ### Claude Code
 
+**Option 1: Automatic key substitution (recommended)**
+
+If you have both `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY` set, the shim will automatically detect and substitute your Anthropic key with your OpenRouter key:
+
 ```bash
-export OPENROUTER_API_KEY="your-api-key"
-npx openrouter-provider-shim serve --port 8787 --provider-only fireworks --sort throughput --no-fallbacks
+export OPENROUTER_API_KEY="sk-or-v1-..."
+export ANTHROPIC_API_KEY="sk-ant-..."  # Can keep this set for other tools
+export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"
+
+npx openrouter-provider-shim serve --port 8787 --provider-only fireworks --sort throughput --no-fallbacks &
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8787"
+
+claude
+```
+
+**Option 2: Explicit configuration**
+
+If you prefer explicit control or the automatic substitution isn't working:
+
+```bash
+export OPENROUTER_API_KEY="sk-or-v1-..."
+npx openrouter-provider-shim serve --port 8787 --provider-only fireworks --sort throughput --no-fallbacks &
 
 export ANTHROPIC_BASE_URL="http://127.0.0.1:8787"
 export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
-export ANTHROPIC_API_KEY=""
+export ANTHROPIC_API_KEY=""  # Must be empty to use AUTH_TOKEN
 export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"
 
 claude
@@ -91,6 +110,27 @@ Configuration can be provided via:
 1. CLI flags (highest priority)
 2. Environment variables
 3. Config file (lowest priority)
+
+### Authentication
+
+The shim supports several authentication modes:
+
+**passthrough mode (default)**
+- Forwards the `Authorization` header from the inbound request to OpenRouter
+- **Smart substitution**: If the inbound auth looks like an Anthropic API key (starts with `sk-ant-`) and you have `OPENROUTER_API_KEY` set, the shim automatically substitutes it with your OpenRouter key
+- This allows you to keep `ANTHROPIC_API_KEY` set for other tools while using OpenRouter via the shim
+
+**upstream-key mode**
+- Always uses the configured OpenRouter API key, ignoring inbound auth
+- Useful when you don't want clients to know the OpenRouter key
+
+```bash
+# Default passthrough with smart substitution
+npx openrouter-provider-shim serve --port 8787
+
+# Explicit upstream key (never use inbound auth)
+npx openrouter-provider-shim serve --port 8787 --auth-mode upstream-key --upstream-key "sk-or-v1-..."
+```
 
 ### CLI Options
 

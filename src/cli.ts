@@ -132,7 +132,14 @@ program
   .action((opts: { host: string; port: number }) => {
     const baseUrl = `http://${opts.host}:${opts.port}`;
 
-    console.log("=== Claude Code ===");
+    console.log("=== Claude Code (Automatic - Recommended) ===");
+    console.log("# Works if you have both ANTHROPIC_API_KEY and OPENROUTER_API_KEY set");
+    console.log(`export ANTHROPIC_BASE_URL="${baseUrl}"`);
+    console.log(`export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"`);
+    console.log("# The shim will automatically substitute your Anthropic key with your OpenRouter key");
+    console.log("");
+
+    console.log("=== Claude Code (Explicit Control) ===");
     console.log(`export ANTHROPIC_BASE_URL="${baseUrl}"`);
     console.log(`export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"`);
     console.log(`export ANTHROPIC_API_KEY=""`);
@@ -144,7 +151,12 @@ program
     console.log(`export OPENAI_API_KEY="$OPENROUTER_API_KEY"`);
     console.log("");
 
-    console.log("=== Windows PowerShell ===");
+    console.log("=== Windows PowerShell (Automatic) ===");
+    console.log(`$env:ANTHROPIC_BASE_URL="${baseUrl}"`);
+    console.log(`$env:ANTHROPIC_MODEL="moonshotai/kimi-k2.5"`);
+    console.log("");
+
+    console.log("=== Windows PowerShell (Explicit) ===");
     console.log(`$env:ANTHROPIC_BASE_URL="${baseUrl}"`);
     console.log(`$env:ANTHROPIC_AUTH_TOKEN=$env:OPENROUTER_API_KEY`);
     console.log(`$env:ANTHROPIC_API_KEY=""`);
