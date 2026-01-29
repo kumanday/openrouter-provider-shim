@@ -84,7 +84,7 @@ Some AI tools have **native OpenRouter provider routing support** and don't need
 export LLM_LITELLM_EXTRA_BODY='{"provider":{"order":["fireworks"],"allow_fallbacks":false}}'
 export LLM_API_KEY="$OPENROUTER_API_KEY"
 export LLM_MODEL="openrouter/moonshotai/kimi-k2.5"
-openhands --override-with-envs "your task here"
+openhands --override-with-envs
 ```
 
 ### When You DO Need This Shim
@@ -103,28 +103,54 @@ export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"
 claude
 ```
 
-#### Droid (Factory) - If Tool Calls Fail
-Factory BYOK supports OpenRouter via `generic-chat-completion-api`. Their docs also support `extraArgs` for provider-specific request fields which **can** inject OpenRouter `provider: { order: ["fireworks"], allow_fallbacks: false }` without a shim.
+#### Droid (Factory) - When Tool Calls Fail
 
-However, testing shows **tool calls are NOT working** with Droid's native OpenRouter integration.
-
-Try the shim as an alternative path:
-
-```bash
-# In Droid config:
-# baseUrl: http://127.0.0.1:8787/v1
-# provider: generic-chat-completion-api
-# model: moonshotai/kimi-k2.5
+Droid supports OpenRouter via `generic-chat-completion-api`, but tool calls may not work reliably with native OpenRouter integration. If they ever address this, you should be able to simply configure a custom model with OpenRouter provider settings like this:
+```json
+{
+  "model": "moonshotai/kimi-k2.5",
+  "id": "custom:Kimi-K2.5-[OR-->-Fireworks]-2",
+  "index": 2,
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "apiKey": "sk-or-v1-REDACTED",
+  "displayName": "Kimi K2.5 [OR -> Fireworks]",
+  "maxOutputTokens": 131072,
+  "extraArgs": {
+    "provider": {
+      "order": [
+        "fireworks"
+      ],
+      "allow_fallbacks": false
+    }
+  },
+  "noImageSupport": false,
+  "provider": "generic-chat-completion-api"
+}
 ```
 
-You can also try the Anthropic `/v1/messages` path via the shim to test whether the issue is Droid's tool-call wiring vs provider behavior:
+For the time being, however, testing has shown tool calls to fail with the above setup, however. Use this shim for better compatibility.
 
+**1. Start the shim:**
 ```bash
-# In Droid config (alternative):
-# baseUrl: http://127.0.0.1:8787
-# provider: anthropic-messages
-# model: moonshotai/kimi-k2.5
+export OPENROUTER_API_KEY="sk-or-v1-..."
+npx openrouter-provider-shim serve --port 8787 --provider-only fireworks
 ```
+
+**2. Add to `~/.factory/settings.json` in the `customModels` array:**
+```json
+{
+  "model": "moonshotai/kimi-k2.5",
+  "id": "custom:Kimi-K2.5-[shim-->-Fireworks]-2",
+  "index": 2,
+  "baseUrl": "http://127.0.0.1:8787/v1",
+  "apiKey": "sk-or-v1-REDACTED",
+  "displayName": "Kimi K2.5 [shim -> Fireworks]",
+  "maxOutputTokens": 131072,
+  "noImageSupport": false,
+  "provider": "generic-chat-completion-api"
+}
+```
+
 
 ## CLI Commands
 

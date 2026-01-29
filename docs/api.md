@@ -16,7 +16,7 @@ Proxies to OpenRouter's Anthropic-compatible endpoint. Used by Claude Code.
 
 ```json
 {
-  "model": "claude-sonnet-4-5-20250929",
+  "model": "moonshotai/kimi-k2.5",
   "max_tokens": 4096,
   "messages": [
     {"role": "user", "content": "Hello!"}
@@ -26,7 +26,7 @@ Proxies to OpenRouter's Anthropic-compatible endpoint. Used by Claude Code.
 
 **Notes:**
 - Model names are automatically remapped based on `ANTHROPIC_MODEL` environment variable
-- Streaming is supported
+- Streaming is disabled
 - Rate limit retries use custom backoff for Claude Code
 
 ### OpenAI Chat Completions
@@ -47,6 +47,9 @@ Standard OpenAI chat completions endpoint.
   ]
 }
 ```
+
+**Notes:**
+- Streaming is supported
 
 ### OpenAI Responses API
 
