@@ -169,11 +169,12 @@ program
     console.log("# }");
     console.log("");
 
-    console.log("=== OpenHands (Needs Shim for Provider Routing) ===");
-    console.log("# OpenHands docs don't show how to pass per-request provider routing.");
-    console.log("# Use this shim and configure OpenHands with:");
-    console.log(`# Base URL: ${baseUrl}/v1`);
-    console.log("# Model: moonshotai/kimi-k2.5");
+    console.log("=== OpenHands (Native Support - No Shim Needed) ===");
+    console.log("# OpenHands uses LiteLLM in-process with native provider routing:");
+    console.log("export LLM_LITELLM_EXTRA_BODY='{\"provider\":{\"order\":[\"fireworks\"],\"allow_fallbacks\":false}}'");
+    console.log(`export LLM_API_KEY="$OPENROUTER_API_KEY"`);
+    console.log(`export LLM_MODEL="openrouter/moonshotai/kimi-k2.5"`);
+    console.log("openhands --override-with-envs \"your task here\"");
     console.log("");
 
     console.log("=== Droid / Factory (Use Shim if Tool Calls Fail) ===");

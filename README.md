@@ -1,14 +1,14 @@
 # openrouter-provider-shim
 
-Local npx-runnable shim that enforces OpenRouter provider routing (e.g., Fireworks-only) for AI agent tools that cannot configure it natively. **Primarily for Claude Code** - other tools like OpenCode have native OpenRouter provider support.
+Local npx-runnable shim that enforces OpenRouter provider routing (e.g., Fireworks-only) for AI agent tools that cannot configure it natively. **Primarily for Claude Code** and **Droid** - other tools like OpenCode and OpenHands have native OpenRouter provider support.
 
 ## Why this shim exists
 
-Some AI agent harnesses can point at an OpenAI-compatible base URL, but they cannot attach OpenRouter's per-request `provider` routing object. This includes **Claude Code**, which uses the Anthropic Messages API and has no way to specify provider preferences.
+Some AI agent harnesses can point at an OpenAI-compatible base URL, but they cannot attach OpenRouter's per-request `provider` routing object. This includes Claude Code, which uses the Anthropic Messages API and has no way to specify provider preferences.
 
 OpenRouter supports a `provider` object for routing preferences including `only`, `order`, `ignore`, `sort` (price, throughput, latency), performance thresholds, and max price. This shim injects these fields server-side, so end users do not need OpenRouter account-wide settings.
 
-**Note:** Tools like OpenCode have native OpenRouter provider configuration and don't need this shim. See [When You DON'T Need This Shim](#when-you-dont-need-this-shim) below.
+**Note:** Tools like OpenCode and OpenHands have native OpenRouter provider configuration and don't need this shim. See [When You DON'T Need This Shim](#when-you-dont-need-this-shim) below.
 
 ## Features
 
@@ -34,40 +34,19 @@ openrouter-provider-shim serve --port 8787
 
 ### Claude Code
 
-**Option 1: Automatic key substitution (recommended)**
+**Automatic key substitution**
 
 If you have both `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY` set, the shim will automatically detect and substitute your Anthropic key with your OpenRouter key:
 
 ```bash
 export OPENROUTER_API_KEY="sk-or-v1-..."
-export ANTHROPIC_API_KEY="sk-ant-..."  # Can keep this set for other tools
-
-# For best results with Claude Code, use an Anthropic model:
-export ANTHROPIC_MODEL="anthropic/claude-3.5-sonnet"
-# Or for non-Claude models (streaming disabled, auto-retry enabled):
-# export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"
-
-npx openrouter-provider-shim serve --port 8787 --provider-only fireworks --sort throughput --no-fallbacks &
-export ANTHROPIC_BASE_URL="http://127.0.0.1:8787"
-
-claude
-```
-
-**Option 2: Explicit configuration**
-
-If you prefer explicit control or the automatic substitution isn't working:
-
-```bash
-export OPENROUTER_API_KEY="sk-or-v1-..."
-npx openrouter-provider-shim serve --port 8787 --provider-only fireworks --sort throughput --no-fallbacks &
-
-export ANTHROPIC_BASE_URL="http://127.0.0.1:8787"
-export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
-export ANTHROPIC_API_KEY=""  # Must be empty to use AUTH_TOKEN
 export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"
+npx openrouter-provider-shim serve --port 8787 --provider-only fireworks --sort throughput --no-fallbacks &
 
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8787"
 claude
 ```
+
 
 ### Known Limitations
 
@@ -100,6 +79,14 @@ Some AI tools have **native OpenRouter provider routing support** and don't need
 }
 ```
 
+**OpenHands** - Uses LiteLLM in-process and supports provider routing via `LLM_LITELLM_EXTRA_BODY`:
+```bash
+export LLM_LITELLM_EXTRA_BODY='{"provider":{"order":["fireworks"],"allow_fallbacks":false}}'
+export LLM_API_KEY="$OPENROUTER_API_KEY"
+export LLM_MODEL="openrouter/moonshotai/kimi-k2.5"
+openhands --override-with-envs "your task here"
+```
+
 ### When You DO Need This Shim
 
 Use this shim for tools that **cannot** configure OpenRouter's per-request provider routing:
@@ -116,19 +103,7 @@ export ANTHROPIC_MODEL="moonshotai/kimi-k2.5"
 claude
 ```
 
-#### OpenHands
-OpenHands documentation shows OpenRouter as a provider and using an OpenAI proxy via Base URL + Custom Model, but they **do NOT document** a way to pass OpenRouter per-request provider routing (`provider.order/only/allow_fallbacks`). If you need deterministic routing to Fireworks for Kimi K2.5, use this shim as an OpenAI-compatible base URL:
-
-```bash
-# In OpenHands settings:
-# Base URL: http://127.0.0.1:8787/v1
-# Model: moonshotai/kimi-k2.5
-# API Key: (your OpenRouter API key)
-```
-
-**Note:** OpenHands mentions LiteLLM proxy, but you must set up and run LiteLLM proxy yourself - it's not "always running".
-
-#### Droid (Factory)
+#### Droid (Factory) - If Tool Calls Fail
 Factory BYOK supports OpenRouter via `generic-chat-completion-api`. Their docs also support `extraArgs` for provider-specific request fields which **can** inject OpenRouter `provider: { order: ["fireworks"], allow_fallbacks: false }` without a shim.
 
 However, testing shows **tool calls are NOT working** with Droid's native OpenRouter integration.
