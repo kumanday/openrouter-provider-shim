@@ -158,12 +158,14 @@ export function startServer(cfg: ShimConfig): http.Server {
           log.debug({ body: bodyToLog }, "request body");
         }
         
-        // Force non-streaming mode to avoid SSE translation issues with non-Claude models
-        // This is a workaround for OpenRouter's streaming format translation
-        if (body?.stream === true) {
+        // Force non-streaming mode only for Claude Code (Anthropic Messages API)
+        // Claude Code has issues with SSE streaming from non-Claude models via OpenRouter
+        // OpenAI-compatible clients (Droid, etc.) should use streaming normally
+        const isAnthropicEndpoint = url.pathname === "/v1/messages";
+        if (body?.stream === true && isAnthropicEndpoint) {
           body.stream = false;
           if (cfg.log_level === "debug") {
-            log.debug({}, "disabled streaming for non-Claude model");
+            log.debug({}, "disabled streaming for Anthropic API endpoint");
           }
         }
 
