@@ -327,8 +327,12 @@ export function startServer(cfg: ShimConfig): http.Server {
     } catch (err: any) {
       const ms = Date.now() - started;
       const msg = err?.message ?? String(err);
-      writeError(res, 500, msg, "ERR_INTERNAL");
-      log.error({ ms, err: msg, path: url.pathname }, "error");
+      // Only write error response if headers haven't been sent yet
+      // (e.g., if piping already started, we can't send an error)
+      if (!res.headersSent) {
+        writeError(res, 500, msg, "ERR_INTERNAL");
+      }
+      log.error({ ms, err: msg, path: url.pathname, headersSent: res.headersSent }, "error");
     }
   });
 
